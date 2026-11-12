@@ -67,18 +67,15 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .bub i span.none{position:relative;overflow:hidden;display:grid;place-items:center;background:var(--harbor);color:var(--fog);font-weight:700;font-size:20px}
 @media (max-width:700px){.bar .pill{display:none}}
 
-/* ---------- Desktop side rail ---------- */
-.rail{display:none}
-@media (min-width:1100px){
-  .rail{display:block;position:fixed;top:120px;left:max(24px,calc(50% - var(--col)/2 - 280px));width:220px}
-  .rail a{display:flex;justify-content:space-between;gap:12px;padding:7px 12px;border-radius:10px;text-decoration:none;color:var(--tide);font-size:14px}
-  .rail a b{font-weight:500;color:inherit;font-size:12px}
-  .rail a:hover{background:var(--mist);color:var(--harbor)}
-  .rail a.on{background:var(--white);color:var(--harbor);font-weight:600;box-shadow:inset 0 0 0 1px var(--rule)}
-  .rail h3{font-size:12px;color:var(--tide);font-weight:500;padding:0 12px 8px}
-  .hl{display:none}
-  html{scroll-padding-top:72px}
-}
+/* ---------- Tabs ---------- */
+.tabs{max-width:calc(var(--col) + 32px);margin:0 auto;display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;padding:0 16px;border-bottom:1px solid var(--rule)}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex:none;padding:12px 12px 11px;font-size:14.5px;font-weight:550;color:var(--tide);border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.tab b{font-weight:500;font-size:12px;margin-left:5px;color:var(--tide)}
+.tab[aria-selected="true"]{color:var(--harbor);border-bottom-color:var(--jacaranda)}
+.tab:hover{color:var(--harbor)}
+.filter-note{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:12px 0 4px;padding:10px 14px;border-radius:12px;background:var(--white);font-size:14px;box-shadow:inset 0 0 0 1px var(--rule)}
+.filter-note button{color:var(--jacaranda);font-weight:600;font-size:14px}
 
 /* ---------- Feed ---------- */
 .feed{max-width:calc(var(--col) + 32px);margin:0 auto;padding:8px 16px 40px}
@@ -182,8 +179,10 @@ footer .cta{margin-top:18px}
   </div>
 </section>
 
-<nav class="hl" id="hl" aria-label="Sections"><div class="hl-row" id="hl-row"></div></nav>
-<nav class="rail" id="rail" aria-label="Sections"></nav>
+<div class="hl" id="hl">
+  <div class="tabs" id="tabs" role="tablist" aria-label="Types of work"></div>
+  <nav class="hl-row" id="hl-row" aria-label="Filter"></nav>
+</div>
 
 <main class="feed" id="feed"></main>
 
@@ -205,7 +204,7 @@ footer .cta{margin-top:18px}
 
 <script>
 /* ===== Settings you can change ===== */
-const SHEET_ID = '1_mwttOg4vbOWfnNg-Pgs_r8Ljn0E523LgSrvFB3gOsY'; // your Google Sheet
+const SHEET_ID = '1-1lVlglZXs1sCL25J29Yx_SQTCbw2zfHGe9qkPS77f8'; // your Google Sheet
 const SHEET_TAB = '';           // optional tab name; blank = first tab
 const LINKEDIN_URL = '';        // e.g. https://www.linkedin.com/in/your-name
 const RESUME_URL = '';          // a link to your résumé PDF
@@ -223,6 +222,14 @@ const SECTIONS = {              // section order and the one-line intro for each
   'Class Projects': 'Research, analysis, and creative work from SDSU and MiraCosta College.',
   'Video & Speaking': 'Writing and speaking in front of an audience.',
 };
+const TABS = [                 // the tabs across the top, and which sections each one holds
+  ['Social', ['Social Media Design']],
+  ['Print', ['Posters & Print']],
+  ['Branding', ['Book Covers & Branding']],
+  ['Web & AI', ['Websites & E-commerce', 'AI & Web Projects']],
+  ['Projects', ['Case Studies', 'Class Projects']],
+  ['Writing', ['Writing', 'Video & Speaking']],
+];
 const SHORT = {                 // short labels for the round section buttons
   'Websites & E-commerce':'Websites', 'Social Media Design':'Social', 'Posters & Print':'Print',
   'Book Covers & Branding':'Covers', 'AI & Web Projects':'AI & Web', 'Case Studies':'Case Studies',
@@ -308,7 +315,13 @@ function post(it, idx){
   </article>`;
 }
 
-let cats=[];
+let cats=[], tab='All', who=null;
+const tabOf = c => (TABS.find(([,cs])=>cs.includes(c))||[c])[0];
+const firstImgOf = list => { const it = list.find(it=>imgs(it).length); return it ? src(imgs(it)[0]) : ''; };
+function bubble(label, key, img, on, extra=''){
+  return `<a class="bub${on?' on':''}" href="#" data-key="${esc(key)}" ${extra}><i><span class="none">${esc(label[0])}${img?`<img src="${esc(img)}" alt="" onerror="this.remove()">`:''}</span></i><em>${esc(label)}</em></a>`;
+}
+
 function build(){
   const known = Object.keys(SECTIONS);
   cats = known.filter(c=>items.some(it=>it.Category===c))
@@ -316,20 +329,48 @@ function build(){
   const years = items.map(it=>parseInt(String(it.Year).match(/\d{4}/)?.[0])).filter(Boolean);
   const since = years.length ? Math.min(...years) : 2021;
   $('#stats').innerHTML = `<li><b>${items.length}</b><small>pieces</small></li><li><b>${cats.length}</b><small>sections</small></li><li><b>${new Date().getFullYear()-since}+</b><small>years</small></li>`;
+  const present = new Set(cats.map(tabOf));
+  const tabNames = ['All', ...TABS.map(([t])=>t).filter(t=>present.has(t)), ...[...present].filter(t=>!TABS.some(([x])=>x===t))];
+  if(!tabNames.includes(tab)) tab = 'All';
+  $('#tabs').innerHTML = tabNames.map(t => {
+    const n = t==='All' ? items.length : items.filter(it=>tabOf(it.Category)===t).length;
+    return `<button class="tab" role="tab" data-tab="${esc(t)}" aria-selected="${t===tab}">${esc(t)}<b>${n}</b></button>`;
+  }).join('');
+  render();
+}
 
-  const firstImg = c => { const it = items.find(it=>it.Category===c && imgs(it).length); return it ? src(imgs(it)[0]) : ''; };
-  const thumbsOf = c => items.filter(it=>it.Category===c && imgs(it).length).slice(1,3).map(it=>src(imgs(it)[0]));
+function render(){
+  // bubbles: on All they jump to a section; inside a tab they filter by client
+  const inTab = items.filter(it => tab==='All' || tabOf(it.Category)===tab);
+  if(tab==='All'){
+    $('#hl-row').innerHTML = cats.map(c => bubble(SHORT[c]||c, 'cat:'+slug(c), firstImgOf(items.filter(it=>it.Category===c)), false)).join('');
+  } else {
+    const accts = [...new Set(inTab.map(account))];
+    $('#hl-row').innerHTML = accts.length > 1
+      ? bubble('All', '', '', !who) + accts.map(a => {
+          const logo = src('logos/' + slug(a) + '.png');
+          return bubble(a, 'who:'+a, logo, who===a, `data-fallback="${esc(firstImgOf(inTab.filter(it=>account(it)===a)))}"`);
+        }).join('')
+      : '';
+    // if a client has no logo yet, show a piece of their work instead
+    document.querySelectorAll('.bub[data-fallback] img').forEach(img => {
+      img.onerror = () => { const fb = img.closest('.bub').dataset.fallback; if(fb && img.src.indexOf(fb)<0){ img.src = fb; } else img.remove(); };
+    });
+  }
+  $('#hl-row').style.display = $('#hl-row').children.length ? '' : 'none';
 
-  $('#hl-row').innerHTML = cats.map(c=>`<a class="bub" href="#${slug(c)}" data-for="${slug(c)}"><i><span class="none">${esc((SHORT[c]||c)[0])}${firstImg(c)?`<img src="${esc(firstImg(c))}" alt="" onerror="this.remove()">`:''}</span></i><em>${esc(SHORT[c]||c)}</em></a>`).join('');
-  $('#rail').innerHTML = '<h3>Sections</h3>' + cats.map(c=>`<a href="#${slug(c)}" data-for="${slug(c)}">${esc(c)}<b>${items.filter(it=>it.Category===c).length}</b></a>`).join('');
-
-  $('#feed').innerHTML = cats.map(c => {
-    const list = items.map((it,i)=>[it,i]).filter(([it])=>it.Category===c);
-    return `<section class="section-card" id="${slug(c)}" data-for="${slug(c)}">
-        <div class="thumbs" aria-hidden="true">${thumbsOf(c).map(u=>`<span style="background-image:url('${esc(u)}')"></span>`).join('')}</div>
-        <h2>${esc(c)}</h2><p>${esc(SECTIONS[c]||'')}</p><small>${list.length} ${list.length===1?'piece':'pieces'}</small>
-      </section>` + list.map(([it,i])=>post(it,i)).join('');
-  }).join('') || '<p class="empty">Check a box in the Include column of the sheet to show a piece here.</p>';
+  const shown = inTab.filter(it => !who || account(it)===who);
+  const groups = cats.filter(c => shown.some(it=>it.Category===c));
+  const thumbsOf = c => shown.filter(it=>it.Category===c && imgs(it).length).slice(1,3).map(it=>src(imgs(it)[0]));
+  $('#feed').innerHTML = (who ? `<div class="filter-note"><span>Showing work for <b>${esc(who)}</b></span><button data-clear>Show all</button></div>` : '') +
+    (groups.map(c => {
+      const list = items.map((it,i)=>[it,i]).filter(([it])=>it.Category===c && shown.includes(it));
+      const card = (tab==='All' || groups.length>1) && !who ? `<section class="section-card" id="${slug(c)}">
+          <div class="thumbs" aria-hidden="true">${thumbsOf(c).map(u=>`<span style="background-image:url('${esc(u)}')"></span>`).join('')}</div>
+          <h2>${esc(c)}</h2><p>${esc(SECTIONS[c]||'')}</p><small>${list.length} ${list.length===1?'piece':'pieces'}</small>
+        </section>` : '';
+      return card + list.map(([it,i])=>post(it,i)).join('');
+    }).join('') || '<p class="empty">Check a box in the Include column of the sheet to show a piece here.</p>');
 
   // size each carousel to its first image, between 4:5 tall and 1.91:1 wide
   document.querySelectorAll('.slides[data-i]').forEach(s => {
@@ -342,7 +383,16 @@ function build(){
     }, {once:true});
     s.addEventListener('scroll', () => syncSlides(s), {passive:true});
   });
-  watchSections();
+  spy();
+}
+
+function setTab(t, keepScroll){
+  tab = t; who = null;
+  document.querySelectorAll('.tab').forEach(b => b.setAttribute('aria-selected', b.dataset.tab===t));
+  const b = document.querySelector(`.tab[data-tab="${CSS.escape(t)}"]`); b && b.scrollIntoView({inline:'center', block:'nearest'});
+  try{ history.replaceState(null,'', t==='All' ? location.pathname+location.search : '#'+slug(t)); }catch(e){}
+  render();
+  if(!keepScroll){ const top = $('#hl').offsetTop; if(scrollY > top) scrollTo({top}); }
 }
 
 function syncSlides(s){
@@ -354,24 +404,36 @@ function syncSlides(s){
   if(p) p.hidden = k===0; if(nx) nx.hidden = k>=n-1;
 }
 
-/* Highlight the section you're in */
-function watchSections(){
-  const marks = [...document.querySelectorAll('.section-card')];
-  const set = id => {
-    document.querySelectorAll('[data-for]').forEach(a => { if(a.tagName==='A') a.classList.toggle('on', a.dataset.for===id); });
-    const b = document.querySelector(`.bub[data-for="${id}"]`);
-    if(b){ const row = $('#hl-row'); row.scrollTo({left: b.offsetLeft - row.clientWidth/2 + b.clientWidth/2, behavior:'smooth'}); }
-  };
-  let current = null;
-  const onScroll = () => {
-    const y = 160; let id = null;
-    for(const m of marks){ if(m.getBoundingClientRect().top <= y) id = m.id; else break; }
-    if(id !== current){ current = id; set(id); }
-    $('#top').classList.toggle('scrolled', scrollY > 10);
-  };
-  addEventListener('scroll', () => requestAnimationFrame(onScroll), {passive:true});
-  onScroll();
+/* On the All tab, light up the bubble for the section you're reading */
+let marks=[], current=null;
+function spy(){ marks = [...document.querySelectorAll('.section-card')]; current=null; onScroll(); }
+function onScroll(){
+  $('#top').classList.toggle('scrolled', scrollY > 10);
+  if(tab!=='All') return;
+  const y = $('#hl').getBoundingClientRect().bottom + 24; let id = null;
+  for(const m of marks){ if(m.getBoundingClientRect().top <= y) id = m.id; else break; }
+  if(id === current) return; current = id;
+  document.querySelectorAll('.bub').forEach(a => a.classList.toggle('on', a.dataset.key==='cat:'+id));
+  const b = document.querySelector(`.bub[data-key="cat:${id}"]`);
+  if(b){ const row = $('#hl-row'); row.scrollTo({left: b.offsetLeft - row.clientWidth/2 + b.clientWidth/2, behavior:'smooth'}); }
 }
+addEventListener('scroll', () => requestAnimationFrame(onScroll), {passive:true});
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('.tab'); if(t) return setTab(t.dataset.tab);
+  if(e.target.closest('[data-clear]')){ who=null; render(); return; }
+  const b = e.target.closest('.bub'); if(!b) return;
+  e.preventDefault();
+  const key = b.dataset.key;
+  if(key.startsWith('cat:')){
+    const el = document.getElementById(key.slice(4));
+    if(el) scrollTo({top: el.getBoundingClientRect().top + scrollY - $('#hl').offsetHeight - 70});
+  } else {
+    const next = key ? key.slice(4) : null;
+    who = (who===next) ? null : next; render();
+    const top = $('#hl').offsetTop; if(scrollY > top) scrollTo({top});
+  }
+});
 
 /* Clicks: carousel arrows, "more", full-size view */
 document.addEventListener('click', e => {
@@ -414,7 +476,11 @@ document.addEventListener('keydown', e => {
     const fb = $('#forbanner'); fb.style.display='block';
     fb.innerHTML = `A selection for ${esc(forTag)} roles. <a href="${location.pathname}">See all work</a>`;
   }
+  const h = location.hash.slice(1);
+  const fromHash = TABS.map(([t])=>t).find(t => slug(t)===h);
+  if(fromHash) tab = fromHash;
   build();
+  if(fromHash) setTab(fromHash, true);
 })();
 </script>
 </body>
