@@ -206,6 +206,7 @@ footer .cta{margin-top:18px}
 /* ===== Settings you can change ===== */
 const SHEET_ID = '1JGB1irRzoGo-CxU4Lvws243c3937mquqflhCaLudpVc'; // your Google Sheet
 const SHEET_TAB = '';           // optional tab name; blank = first tab
+const IMAGES_SHEET_ID = '13K2AEL29G8dpMgQ6hiy0IOrHAglEGHeovOlNFFQ50Eg'; // which pictures show in each carousel
 const LINKEDIN_URL = '';        // e.g. https://www.linkedin.com/in/your-name
 const RESUME_URL = '';          // a link to your résumé PDF
 const PROFILE_PHOTO = '';       // e.g. 'me.jpg' in the images folder; blank shows your initials
@@ -267,8 +268,21 @@ async function load(){
   return [];
 }
 
-let items=[];
-const imgs = it => String(it.Image||'').split(',').map(x=>x.trim()).filter(Boolean);
+let items=[], GALLERY={};
+async function loadGallery(){
+  let rows=null;
+  const urls=[];
+  if(IMAGES_SHEET_ID) urls.push(`https://docs.google.com/spreadsheets/d/${IMAGES_SHEET_ID}/gviz/tq?tqx=out:csv`);
+  urls.push('images.csv');
+  for(const u of urls){ try{ const r=await fetch(u,{cache:'no-store'}); if(r.ok){ const d=parseCSV(await r.text()); if(d.length && 'Project' in d[0]){ rows=d; break; } } }catch(e){} }
+  if(!rows && window.EMBED_IMGCSV) rows=parseCSV(window.EMBED_IMGCSV);
+  const g={};
+  (rows||[]).forEach(r => { const k=(r.Project||'').trim(); if(!k) return; (g[k]=g[k]||[]); if(isOn(r.Include) && r.Image) g[k].push([parseFloat(r.Order)||999, r.Image.trim()]); });
+  Object.keys(g).forEach(k => g[k] = g[k].sort((a,b)=>a[0]-b[0]).map(x=>x[1]));
+  return g;
+}
+const listed = it => String(it.Image||'').split(',').map(x=>x.trim()).filter(Boolean);
+const imgs = it => { const l = listed(it); const g = l[0] && GALLERY[l[0]]; return (g && g.length) ? g : l; };
 const src = n => (window.imgSrc ? window.imgSrc(n) : 'images/' + n);
 
 /* The account a post comes from: the client name before any "·", "×", "(" or "," */
@@ -366,7 +380,9 @@ function render(){
   const thumbsOf = c => shown.filter(it=>it.Category===c && imgs(it).length).slice(1,3).map(it=>src(imgs(it)[0]));
   $('#feed').innerHTML = (who ? `<div class="filter-note"><span>Showing work for <b>${esc(who)}</b></span><button data-clear>Show all</button></div>` : '') +
     (groups.map(c => {
-      const list = items.map((it,i)=>[it,i]).filter(([it])=>it.Category===c && shown.includes(it));
+      let list = items.map((it,i)=>[it,i]).filter(([it])=>it.Category===c && shown.includes(it));
+      const firstSeen = {}; list.forEach(([it],n) => { const a=account(it); if(!(a in firstSeen)) firstSeen[a]=n; });
+      list = list.map((x,n)=>[x,n]).sort((A,B)=> (firstSeen[account(A[0][0])]-firstSeen[account(B[0][0])]) || (A[1]-B[1])).map(x=>x[0]);
       const card = (tab==='All' || groups.length>1) && !who ? `<section class="section-card" id="${slug(c)}">
           <div class="thumbs" aria-hidden="true">${thumbsOf(c).map(u=>`<span style="background-image:url('${esc(u)}')"></span>`).join('')}</div>
           <h2>${esc(c)}</h2><p>${esc(SECTIONS[c]||'')}</p><small>${list.length} ${list.length===1?'piece':'pieces'}</small>
@@ -471,6 +487,7 @@ document.addEventListener('keydown', e => {
   if(RESUME_URL) $('#resume').href = RESUME_URL; else $('#resume').remove();
   if(PROFILE_PHOTO) $('#me').innerHTML = `<img src="${esc(src(PROFILE_PHOTO))}" alt="Bryan Lane">`;
   const forTag = new URLSearchParams(location.search).get('for');
+  GALLERY = await loadGallery();
   items = (await load()).filter(r => isOn(r.Include) && r.Title)
     .sort((a,b) => (parseFloat(a.Order)||999) - (parseFloat(b.Order)||999));
   if(forTag){
