@@ -292,11 +292,13 @@ async function load(){
 
 let items=[], GALLERY={};
 async function loadGallery(){
-  let rows=null;
-  for(const u of [SHEET_ID && gviz(IMAGES_TAB), 'images.csv'].filter(Boolean)){ const d = await getCSV(u); if(d && d.length && 'Image Key' in d[0]){ rows=d; break; } }
-  if(!rows && window.EMBED_IMGCSV) rows=parseCSV(window.EMBED_IMGCSV);
+  // the sheet's Images tab wins; any project it doesn't list yet uses the copy saved with the site
+  const ok = d => d && d.length && 'Image Key' in d[0] ? d : null;
+  const [sheet, saved] = await Promise.all([SHEET_ID ? getCSV(gviz(IMAGES_TAB)).then(ok) : null, getCSV('images.csv').then(ok)]);
+  const inSheet = new Set((sheet||[]).map(r => (r['Image Key']||'').trim()));
+  const rows = (sheet||[]).concat((saved || (window.EMBED_IMGCSV ? parseCSV(window.EMBED_IMGCSV) : [])).filter(r => !inSheet.has((r['Image Key']||r.Project||'').trim())));
   const g={};
-  (rows||[]).forEach(r => { const k=(r['Image Key']||r.Project||'').trim(); if(!k) return; (g[k]=g[k]||[]); if(isOn(r.Include) && r.Image) g[k].push([parseFloat(r.Order)||999, r.Image.trim()]); });
+  rows.forEach(r => { const k=(r['Image Key']||r.Project||'').trim(); if(!k) return; (g[k]=g[k]||[]); if(isOn(r.Include) && r.Image) g[k].push([parseFloat(r.Order)||999, r.Image.trim()]); });
   Object.keys(g).forEach(k => g[k] = g[k].sort((a,b)=>a[0]-b[0]).map(x=>x[1]));
   return g;
 }
