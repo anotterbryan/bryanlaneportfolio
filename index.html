@@ -238,40 +238,23 @@ footer .cta{margin-top:18px}
 
 <script>
 /* ===== Settings you can change ===== */
-const SHEET_ID = '1JGB1irRzoGo-CxU4Lvws243c3937mquqflhCaLudpVc'; // your Google Sheet
-const SHEET_TAB = '';           // optional tab name; blank = first tab
-const IMAGES_SHEET_ID = '1hOoKjJUndNkDPsGWTjqKBKqmMnaCsSrhtnY0950_my0'; // which pictures show in each carousel
+const SHEET_ID = '1BfR_zvVMzZXX_2fJ0ThWfrynKkxEwXZ2lRq3caAbXXU'; // your "Control Panel" Google Sheet
 const LINKEDIN_URL = '';        // e.g. https://www.linkedin.com/in/your-name
 const RESUME_URL = '';          // a link to your résumé PDF
 const PROFILE_PHOTO = '';       // e.g. 'me.jpg' in the images folder; blank shows your initials
-/* Client logos: drop a square or round image into images/logos/ named after the client,
+/* Client logos: drop a square or round image into images/logos/ named after the tab,
    e.g. images/logos/san-diego-music-studio.png or images/logos/reeds-for-less.png */
-const SECTIONS = {              // section order and the one-line intro for each
-  'Websites & E-commerce': 'Online stores and sites, built and grown.',
-  'Social Media Design': 'Campaigns and event promos people stopped scrolling for.',
-  'Posters & Print': 'Flyers and posters for exhibits, concerts, and community events.',
-  'Book Covers & Branding': 'Covers, identities, and visual systems.',
-  'Product Photography': 'Product shots I took and edited for online stores.',
-  'AI & Web Projects': 'Custom tools that save real hours, built with AI.',
-  'Case Studies': 'Projects with the full story and the results.',
-  'Writing': 'Award submissions that earned recognition from the music industry.',
-  'Class Projects': 'Research, analysis, and creative work from SDSU and MiraCosta College.',
-  'Video & Speaking': 'Writing and speaking in front of an audience.',
-};
-const TABS = [                 // the tabs across the top, and which sections each one holds
-  ['Social', ['Social Media Design']],
-  ['Print', ['Posters & Print']],
-  ['Branding', ['Book Covers & Branding']],
-  ['Photography', ['Product Photography']],
-  ['Web & AI', ['Websites & E-commerce', 'AI & Web Projects']],
-  ['Projects', ['Case Studies', 'Class Projects']],
-  ['Writing', ['Writing', 'Video & Speaking']],
+const ENTITIES = [              // one tab per entity in the sheet, in this order, with a one-line intro
+  ['San Diego Music Studio', 'SDMS', 'Events, campaigns, print, and the online store for a NAMM Top 100 music retailer.'],
+  ['Reeds For Less', 'RFL', 'Brand launch, product photography, and storefront tools for a woodwind e-commerce shop.'],
+  ['School', 'School', 'Research, strategy, and design from SDSU and MiraCosta College.'],
+  ['University Club', 'U Club', 'Posters and social media for the Arts Committee and Young Executives Society.'],
+  ['Armando F. Sanchez', 'Armando', 'Book covers and launch graphics for an author and publisher.'],
+  ['First UU', 'First UU', 'Print, storytelling, and services for First Unitarian Universalist Church of San Diego.'],
+  ['Freelance & Personal', 'Freelance', 'Client sites, identities, and personal projects built with design and AI.'],
 ];
-const SHORT = {                 // short labels for the round section buttons
-  'Websites & E-commerce':'Websites', 'Social Media Design':'Social', 'Posters & Print':'Print',
-  'Book Covers & Branding':'Covers', 'AI & Web Projects':'AI & Web', 'Case Studies':'Case Studies',
-  'Writing':'Writing', 'Product Photography':'Photos', 'Class Projects':'Class', 'Video & Speaking':'Video',
-};
+const IMAGES_TAB = 'Images';
+const TYPES = ['Social','Print','Branding','Photography','Web & AI','Projects','Writing','Video']; // tag columns = site tabs
 /* =================================== */
 
 const $ = s => document.querySelector(s);
@@ -294,24 +277,26 @@ function parseCSV(text){
   const head=rows.shift().map(h=>h.trim());
   return rows.filter(r=>r.some(v=>v.trim())).map(r=>Object.fromEntries(head.map((h,i)=>[h,(r[i]??'').trim()])));
 }
+const gviz = tab => `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tab)}`;
+async function getCSV(u){ try{ const r=await fetch(u,{cache:'no-store'}); if(r.ok) return parseCSV(await r.text()); }catch(e){} return null; }
 async function load(){
-  const urls=[];
-  if(SHEET_ID) urls.push(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv${SHEET_TAB?'&sheet='+encodeURIComponent(SHEET_TAB):''}`);
-  urls.push('portfolio.csv');
-  for(const u of urls){ try{ const r=await fetch(u,{cache:'no-store'}); if(r.ok){ const d=parseCSV(await r.text()); if(d.length && 'Include' in d[0]) return d; } }catch(e){} }
-  return [];
+  if(SHEET_ID){
+    const parts = await Promise.all(ENTITIES.map(async ([tab]) => {
+      const d = await getCSV(gviz(tab));
+      return (d && d.length && 'Title' in d[0]) ? d.map(r => ({...r, Entity: tab})) : null;
+    }));
+    if(parts.some(Boolean)) return parts.filter(Boolean).flat();
+  }
+  return (await getCSV('portfolio.csv')) || (window.EMBED_CSV ? parseCSV(window.EMBED_CSV) : []);
 }
 
 let items=[], GALLERY={};
 async function loadGallery(){
   let rows=null;
-  const urls=[];
-  if(IMAGES_SHEET_ID) urls.push(`https://docs.google.com/spreadsheets/d/${IMAGES_SHEET_ID}/gviz/tq?tqx=out:csv`);
-  urls.push('images.csv');
-  for(const u of urls){ try{ const r=await fetch(u,{cache:'no-store'}); if(r.ok){ const d=parseCSV(await r.text()); if(d.length && 'Project' in d[0]){ rows=d; break; } } }catch(e){} }
+  for(const u of [SHEET_ID && gviz(IMAGES_TAB), 'images.csv'].filter(Boolean)){ const d = await getCSV(u); if(d && d.length && 'Image Key' in d[0]){ rows=d; break; } }
   if(!rows && window.EMBED_IMGCSV) rows=parseCSV(window.EMBED_IMGCSV);
   const g={};
-  (rows||[]).forEach(r => { const k=(r.Project||'').trim(); if(!k) return; (g[k]=g[k]||[]); if(isOn(r.Include) && r.Image) g[k].push([parseFloat(r.Order)||999, r.Image.trim()]); });
+  (rows||[]).forEach(r => { const k=(r['Image Key']||r.Project||'').trim(); if(!k) return; (g[k]=g[k]||[]); if(isOn(r.Include) && r.Image) g[k].push([parseFloat(r.Order)||999, r.Image.trim()]); });
   Object.keys(g).forEach(k => g[k] = g[k].sort((a,b)=>a[0]-b[0]).map(x=>x[1]));
   return g;
 }
@@ -322,12 +307,13 @@ const slide = (n, alt, k) => {
   if(id) return `<div class="vid${/shorts/.test(n)?' tall':''}" data-k="${k}"><iframe src="https://www.youtube-nocookie.com/embed/${id}?rel=0" title="${esc(alt)}" loading="lazy" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen></iframe></div>`;
   return `<img src="${esc(src(n))}" alt="${esc(alt)}" loading="lazy" data-k="${k}">`;
 };
-const listed = it => String(it.Image||'').split(',').map(x=>x.trim()).filter(Boolean);
+const listed = it => String(it['Image Key']||it.Image||'').split(',').map(x=>x.trim()).filter(Boolean);
 const imgs = it => { const l = listed(it); const g = l[0] && GALLERY[l[0]]; return (g && g.length) ? g : l; };
 const src = n => (window.imgSrc ? window.imgSrc(n) : 'images/' + n);
 
 /* The account a post comes from: the client name before any "·", "×", "(" or "," */
-const account = it => (String(it['Client / Org']||'').split(/\s[·×]\s|\s\(|,/)[0] || 'Bryan Lane').trim();
+const account = it => it.Entity || 'Bryan Lane';
+const types = it => TYPES.filter(t => isOn(it[t]));
 const initials = s => s.replace(/[^A-Za-z0-9 ]/g,'').split(/\s+/).filter(w=>!/^(the|of|and|for|at|a)$/i.test(w)).slice(0,2).map(w=>w[0]).join('').toUpperCase() || 'BL';
 const AV_COLORS = ['#2E5A52','#7656D1','#122A30','#4F6F6A','#5B47A8','#3F5E66'];
 const avColor = s => AV_COLORS[[...s].reduce((a,c)=>a+c.charCodeAt(0),0) % AV_COLORS.length];
@@ -341,7 +327,7 @@ function avatar(it){
 function media(it, idx){
   const list = imgs(it);
   if(!list.length){
-    return `<div class="tile t${idx%3}"><small>${esc(it.Category)}</small><b>${esc(it.Title)}</b><p>${esc(it['My Role']||'')}</p></div>`;
+    return `<div class="tile t${idx%3}"><small>${esc(it.Entity)}</small><b>${esc(it.Title)}</b><p>${esc(it['My Role']||'')}</p></div>`;
   }
   const many = list.length > 1;
   return `<div class="media">
@@ -358,7 +344,7 @@ function post(it, idx){
   const link = it.Link
     ? `<a class="pill" href="${esc(it.Link)}" target="_blank" rel="noopener">${esc(label)}</a>`
     : (/coming soon/i.test(label) ? `<span class="soon">${esc(label)}</span>` : '');
-  const sub = [it.Year, it['My Role']].filter(Boolean).join(', ');
+  const sub = [it['Client / Org'] && it['Client / Org']!==it.Entity ? it['Client / Org'] : '', it.Year].filter(Boolean).join(', ');
   const long = String(it.Description||'').length > 110;
   return `<article class="post" id="p${idx}">
     <div class="post-head">${avatar(it)}<div><b>${esc(account(it))}</b><small>${esc(sub)}</small></div>${concept}</div>
@@ -367,30 +353,31 @@ function post(it, idx){
       ${link?`<div class="actions">${link}</div>`:''}
       <div class="cap ${long?'clamp':''}"><div class="desc"><b>${esc(it.Title)}</b> ${esc(it.Description)}</div>
         ${long?'<button class="more">more</button>':''}</div>
-      ${/[·×]/.test(it['Client / Org']||'') ? `<div class="facts"><span>${esc(it['Client / Org'])}</span></div>`:''}
+      ${it['My Role'] ? `<div class="facts"><span>${esc(it['My Role'])}</span></div>`:''}
     </div>
   </article>`;
 }
 
 let cats=[], tab='All', who=null;
-const tabOf = c => (TABS.find(([,cs])=>cs.includes(c))||[c])[0];
+const SHORT = Object.fromEntries(ENTITIES.map(([t,s])=>[t,s]));
+const INTRO = Object.fromEntries(ENTITIES.map(([t,,i])=>[t,i]));
+const inType = (it,t) => t==='All' || types(it).includes(t);
 const firstImgOf = list => { const it = list.find(it=>imgs(it).length); return it ? src(imgs(it)[0]) : ''; };
 function bubble(label, key, img, on, extra=''){
   return `<a class="bub${on?' on':''}" href="#" data-key="${esc(key)}" ${extra}><i><span class="none">${esc(label[0])}${img?`<img src="${esc(img)}" alt="" onerror="this.remove()">`:''}</span></i><em>${esc(label)}</em></a>`;
 }
 
 function build(){
-  const known = Object.keys(SECTIONS);
-  cats = known.filter(c=>items.some(it=>it.Category===c))
-    .concat([...new Set(items.map(it=>it.Category))].filter(c=>c && !known.includes(c)));
+  const known = ENTITIES.map(([t])=>t);
+  cats = known.filter(c=>items.some(it=>it.Entity===c))
+    .concat([...new Set(items.map(it=>it.Entity))].filter(c=>c && !known.includes(c)));
   const years = items.map(it=>parseInt(String(it.Year).match(/\d{4}/)?.[0])).filter(Boolean);
   const since = years.length ? Math.min(...years) : 2021;
-  $('#stats').innerHTML = `<li><b>${items.length}</b><small>pieces</small></li><li><b>${cats.length}</b><small>sections</small></li><li><b>${new Date().getFullYear()-since}+</b><small>years</small></li>`;
-  const present = new Set(cats.map(tabOf));
-  const tabNames = ['All', ...TABS.map(([t])=>t).filter(t=>present.has(t)), ...[...present].filter(t=>!TABS.some(([x])=>x===t))];
+  $('#stats').innerHTML = `<li><b>${items.length}</b><small>pieces</small></li><li><b>${cats.length}</b><small>clients</small></li><li><b>${new Date().getFullYear()-since}+</b><small>years</small></li>`;
+  const tabNames = ['All', ...TYPES.filter(t => items.some(it=>inType(it,t)))];
   if(!tabNames.includes(tab)) tab = 'All';
   $('#tabs').innerHTML = tabNames.map(t => {
-    const n = t==='All' ? items.length : items.filter(it=>tabOf(it.Category)===t).length;
+    const n = items.filter(it=>inType(it,t)).length;
     return `<button class="tab" role="tab" data-tab="${esc(t)}" aria-selected="${t===tab}">${esc(t)}<b>${n}</b></button>`;
   }).join('');
   render();
@@ -398,36 +385,34 @@ function build(){
 
 function render(){
   // bubbles: on All they jump to a section; inside a tab they filter by client
-  const inTab = items.filter(it => tab==='All' || tabOf(it.Category)===tab);
+  const inTab = items.filter(it => inType(it,tab));
   if(tab==='All'){
-    $('#hl-row').innerHTML = cats.map(c => bubble(SHORT[c]||c, 'cat:'+slug(c), firstImgOf(items.filter(it=>it.Category===c)), false)).join('');
+    $('#hl-row').innerHTML = cats.map(c => bubble(SHORT[c]||c, 'cat:'+slug(c), src('logos/'+slug(c)+'.png'), false, `data-fallback="${esc(firstImgOf(items.filter(it=>it.Entity===c)))}"`)).join('');
   } else {
-    const accts = [...new Set(inTab.map(account))];
+    const accts = cats.filter(c => inTab.some(it => account(it)===c));
     $('#hl-row').innerHTML = accts.length > 1
       ? bubble('All', '', '', !who) + accts.map(a => {
           const logo = src('logos/' + slug(a) + '.png');
-          return bubble(a, 'who:'+a, logo, who===a, `data-fallback="${esc(firstImgOf(inTab.filter(it=>account(it)===a)))}"`);
+          return bubble(SHORT[a]||a, 'who:'+a, logo, who===a, `data-fallback="${esc(firstImgOf(inTab.filter(it=>account(it)===a)))}"`);
         }).join('')
       : '';
-    // if a client has no logo yet, show a piece of their work instead
-    document.querySelectorAll('.bub[data-fallback] img').forEach(img => {
-      img.onerror = () => { const fb = img.closest('.bub').dataset.fallback; if(fb && img.src.indexOf(fb)<0){ img.src = fb; } else img.remove(); };
-    });
   }
+  // if a client has no logo yet, show a piece of their work instead
+  document.querySelectorAll('.bub[data-fallback] img').forEach(img => {
+    img.onerror = () => { const fb = img.closest('.bub').dataset.fallback; if(fb && img.src.indexOf(fb)<0){ img.src = fb; } else img.remove(); };
+  });
   $('#hl-row').style.display = $('#hl-row').children.length ? '' : 'none';
 
   const shown = inTab.filter(it => !who || account(it)===who);
-  const groups = cats.filter(c => shown.some(it=>it.Category===c));
-  const thumbsOf = c => shown.filter(it=>it.Category===c && imgs(it).length).slice(1,3).map(it=>src(imgs(it)[0]));
+  const groups = cats.filter(c => shown.some(it=>it.Entity===c));
+  const thumbsOf = c => shown.filter(it=>it.Entity===c && imgs(it).length).slice(1,3).map(it=>src(imgs(it)[0]));
   ORDER = [];
   $('#feed').innerHTML = (who ? `<div class="filter-note"><span>Showing work for <b>${esc(who)}</b></span><button data-clear>Show all</button></div>` : '') +
     (groups.map(c => {
-      let list = items.map((it,i)=>[it,i]).filter(([it])=>it.Category===c && shown.includes(it));
-      const firstSeen = {}; list.forEach(([it],n) => { const a=account(it); if(!(a in firstSeen)) firstSeen[a]=n; });
-      list = list.map((x,n)=>[x,n]).sort((A,B)=> (firstSeen[account(A[0][0])]-firstSeen[account(B[0][0])]) || (A[1]-B[1])).map(x=>x[0]);
+      const list = items.map((it,i)=>[it,i]).filter(([it])=>it.Entity===c && shown.includes(it));
       const card = (tab==='All' || groups.length>1) && !who ? `<section class="section-card" id="${slug(c)}">
           <div class="thumbs" aria-hidden="true">${thumbsOf(c).map(u=>`<span style="background-image:url('${esc(u)}')"></span>`).join('')}</div>
-          <h2>${esc(c)}</h2><p>${esc(SECTIONS[c]||'')}</p><small>${list.length} ${list.length===1?'piece':'pieces'}</small>
+          <h2>${esc(c)}</h2><p>${esc(INTRO[c]||'')}</p><small>${list.length} ${list.length===1?'piece':'pieces'}</small>
         </section>` : '';
       ORDER.push(...list.map(([,i])=>i));
       return card + `<div class="grid">${list.map(([it,i])=>cell(it,i)).join('')}</div>`;
@@ -445,7 +430,7 @@ function wireSlides(root){
     first.complete ? fit() : first.addEventListener('load', fit, {once:true});
     first.addEventListener('error', () => {
       const it = items[+s.dataset.i];
-      s.closest('.media').outerHTML = `<div class="tile t${s.dataset.i%3}"><small>${esc(it.Category)}</small><b>${esc(it.Title)}</b><p>${esc(it['My Role']||'')}</p></div>`;
+      s.closest('.media').outerHTML = `<div class="tile t${s.dataset.i%3}"><small>${esc(it.Entity)}</small><b>${esc(it.Title)}</b><p>${esc(it['My Role']||'')}</p></div>`;
     }, {once:true});
   });
 }
@@ -579,7 +564,7 @@ document.addEventListener('keydown', e => {
     fb.innerHTML = `A selection for ${esc(forTag)} roles. <a href="${location.pathname}">See all work</a>`;
   }
   const h = location.hash.slice(1);
-  const fromHash = TABS.map(([t])=>t).find(t => slug(t)===h);
+  const fromHash = TYPES.find(t => slug(t)===h);
   if(fromHash) tab = fromHash;
   build();
   if(fromHash) setTab(fromHash, true);
